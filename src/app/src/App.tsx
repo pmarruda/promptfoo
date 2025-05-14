@@ -17,7 +17,7 @@ import EvalPage from './pages/eval/page';
 import EvalsIndexPage from './pages/evals/page';
 import HistoryPage from './pages/history/page';
 import LauncherPage from './pages/launcher/page';
-import LoginPage from './pages/login';
+//import LoginPage from './pages/login';
 import PromptsPage from './pages/prompts/page';
 import ReportPage from './pages/redteam/report/page';
 import RedteamSetupPage from './pages/redteam/setup/page';
@@ -66,7 +66,7 @@ const router = createBrowserRouter(
           <Route path="/redteam/setup" element={<RedteamSetupPage />} />
           <Route path="/report" element={<ReportPage />} />
           <Route path="/setup" element={<EvalCreatorPage />} />
-          <Route path="/login" element={<LoginPage />} />
+          {/*<Route path="/login" element={<LoginPage />} />*/}
         </Route>
       </Route>
     </>,

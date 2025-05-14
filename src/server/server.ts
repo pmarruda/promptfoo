@@ -37,11 +37,34 @@ import { providersRouter } from './routes/providers';
 import { redteamRouter } from './routes/redteam';
 import { userRouter } from './routes/user';
 
+
+import { auth } from 'express-openid-connect';
+
 // Prompts cache
 let allPrompts: PromptWithMetadata[] | null = null;
 
 export function createApp() {
   const app = express();
+
+  ////////////////////////////////////////
+  // LOGIN STUFF
+  const config = {
+    authRequired: false,
+    auth0Logout: true,
+    secret: 'QSmf8RHEcvfYhuIZzzy18QJXFUWeTeCnPRqAqrr0rQ4MTX6kkkbmSOnD1UdBid8O',
+    baseURL: 'http://localhost:3000',
+    clientID: 't68ZkFkpiVmvaTowjRzCB2MDe6pdbDzN',
+    issuerBaseURL: 'https://dev-c50e4hlurzpxce2y.eu.auth0.com'
+  };
+
+  // auth router attaches /login, /logout, and /callback routes to the baseURL
+  app.use(auth(config));
+
+  app.get('/profile', (req: Request, res: Response) => {
+    res.send(req.oidc.isAuthenticated() ? req.oidc.user : 'Not logged in');
+  });
+
+  //////////////////////////////////////
 
   const staticDir = path.join(getDirectory(), 'app');
 
