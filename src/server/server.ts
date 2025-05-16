@@ -52,9 +52,15 @@ export function createApp() {
     authRequired: false,
     auth0Logout: true,
     secret: '',
-    baseURL: 'http://localhost:15500',
+    baseURL: process.env.AUTH0_BASE_URL || 'http://localhost:15500',
     clientID: '',
-    issuerBaseURL: ''
+    issuerBaseURL: '',
+    routes: {
+      // eslint-disable-next-line @typescript-eslint/prefer-as-const
+      login: false as false, 
+      // eslint-disable-next-line @typescript-eslint/prefer-as-const
+      logout: false as false,
+    }
   };
 
   // auth router attaches /login, /logout, and /callback routes to the baseURL
@@ -64,11 +70,30 @@ export function createApp() {
     res.send(req.oidc.isAuthenticated() ? req.oidc.user : 'Not logged in');
   });
 
+  app.get('/login', (req, res) => {
+    const returnTo = req.query.returnTo as string;
+    res.oidc.login({ returnTo });
+  });
+
+  app.get('/logout', (req, res) => {
+    const returnURL = req.query.returnTo as string;
+    res.oidc.logout({
+      returnTo: returnURL,
+      // This ensures Auth0 SSO session is ended too
+      logoutParams: {
+        returnTo: returnURL,
+      },
+    });
+  });
+
   //////////////////////////////////////
 
   const staticDir = path.join(getDirectory(), 'app');
 
-  app.use(cors());
+  app.use(cors({
+    origin: 'http://localhost:3000', 
+    credentials: true,              
+  }));
   app.use(compression());
   app.use(express.json({ limit: '100mb' }));
   app.use(express.urlencoded({ limit: '100mb', extended: true }));
@@ -253,7 +278,8 @@ export async function startServer(
   const httpServer = http.createServer(app);
   const io = new SocketIOServer(httpServer, {
     cors: {
-      origin: '*',
+      origin: 'http://localhost:3000', 
+      credentials: true,
     },
   });
 
