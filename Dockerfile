@@ -35,9 +35,11 @@ FROM base AS server
 
 WORKDIR /app
 COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/dist ./dist
+# COPY --from=builder /app/dist ./dist
+COPY --from=builder --chown=promptfoo:promptfoo /app/dist ./dist
 
 # Make Python version configurable with a default of 3.12
+
 ARG PYTHON_VERSION=3.12
 
 # Install Python for python providers, prompts, asserts, etc.
@@ -49,7 +51,7 @@ ENV API_PORT=3000
 ENV HOST=0.0.0.0
 ENV PROMPTFOO_SELF_HOSTED=1
 
-RUN chown -R promptfoo:promptfoo /app
+#RUN chown -R promptfoo:promptfoo /app
 USER promptfoo
 
 RUN mkdir -p /home/promptfoo/.promptfoo

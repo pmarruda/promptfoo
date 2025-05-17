@@ -21,6 +21,8 @@ import DarkMode from './DarkMode';
 import InfoModal from './InfoModal';
 import Logo from './Logo';
 import './Navigation.css';
+import useApiConfig from '@app/stores/apiConfig';
+import LogoutIcon from '@mui/icons-material/Logout';
 
 const NavButton = styled(Button)<Partial<ButtonProps> & Partial<LinkProps>>(({ theme }) => ({
   color: theme.palette.text.primary,
@@ -164,6 +166,13 @@ export default function Navigation({
     return null;
   }
 
+  const { apiBaseUrl } = useApiConfig.getState();
+
+  const handleLogout = () => {
+    const logoutUrl = `${apiBaseUrl}/api/logout?returnTo=${window.location.origin}/login`;
+    window.location.href = logoutUrl;
+  };
+
   return (
     <>
       <StyledAppBar position="static" elevation={0}>
@@ -188,6 +197,11 @@ export default function Navigation({
               </Tooltip>
             )}
             <DarkMode onToggleDarkMode={onToggleDarkMode} />
+            <Tooltip title="Logout">
+              <IconButton onClick={handleLogout} color="inherit">
+                <LogoutIcon />
+              </IconButton>
+            </Tooltip>
           </NavSection>
         </NavToolbar>
       </StyledAppBar>

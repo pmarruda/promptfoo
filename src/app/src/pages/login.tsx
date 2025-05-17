@@ -13,12 +13,12 @@ export default function LoginPage() {
   const { apiBaseUrl } = useApiConfig.getState();
 
   const handleLogin = () => {
-    const loginUrl = `${apiBaseUrl}/login?returnTo=${window.location.origin}`;
+    const loginUrl = `${apiBaseUrl}/api/login?returnTo=${window.location.origin}`;
     window.location.href = loginUrl;
   };
 
   const handleLogout = () => {
-    const logoutUrl = `${apiBaseUrl}/logout?returnTo=${window.location.origin}/login`;
+    const logoutUrl = `${apiBaseUrl}/api/logout?returnTo=${window.location.origin}/login`;
     window.location.href = logoutUrl;
   };
 

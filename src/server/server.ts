@@ -37,7 +37,7 @@ import { providersRouter } from './routes/providers';
 import { redteamRouter } from './routes/redteam';
 import { userRouter } from './routes/user';
 
-
+import dotenv from 'dotenv';
 import { auth } from 'express-openid-connect';
 
 // Prompts cache
@@ -46,57 +46,20 @@ let allPrompts: PromptWithMetadata[] | null = null;
 export function createApp() {
   const app = express();
 
-  ////////////////////////////////////////
-  // LOGIN STUFF
-  const config = {
-    authRequired: false,
-    auth0Logout: true,
-    secret: '',
-    baseURL: process.env.AUTH0_BASE_URL || 'http://localhost:15500',
-    clientID: '',
-    issuerBaseURL: '',
-    routes: {
-      // eslint-disable-next-line @typescript-eslint/prefer-as-const
-      login: false as false, 
-      // eslint-disable-next-line @typescript-eslint/prefer-as-const
-      logout: false as false,
-    }
-  };
-
-  // auth router attaches /login, /logout, and /callback routes to the baseURL
-  app.use(auth(config));
-
-  app.get('/profile', (req: Request, res: Response) => {
-    res.send(req.oidc.isAuthenticated() ? req.oidc.user : 'Not logged in');
-  });
-
-  app.get('/login', (req, res) => {
-    const returnTo = req.query.returnTo as string;
-    res.oidc.login({ returnTo });
-  });
-
-  app.get('/logout', (req, res) => {
-    const returnURL = req.query.returnTo as string;
-    res.oidc.logout({
-      returnTo: returnURL,
-      // This ensures Auth0 SSO session is ended too
-      logoutParams: {
-        returnTo: returnURL,
-      },
-    });
-  });
-
-  //////////////////////////////////////
-
   const staticDir = path.join(getDirectory(), 'app');
 
   app.use(cors({
-    origin: 'http://localhost:3000', 
-    credentials: true,              
+    origin: 'http://localhost:3000',
+    credentials: true,
   }));
   app.use(compression());
   app.use(express.json({ limit: '100mb' }));
   app.use(express.urlencoded({ limit: '100mb', extended: true }));
+
+  // app.get('/login', (req, res) => {
+  //   res.sendFile(path.join(staticDir, 'index.html'));
+  // });
+
   app.get('/health', (req, res) => {
     res.status(200).json({ status: 'OK', version: VERSION });
   });
@@ -115,6 +78,58 @@ export function createApp() {
     const result = await checkRemoteHealth(apiUrl);
     res.json(result);
   });
+
+
+
+  ////////////////////////////////////////
+  // LOGIN STUFF
+  dotenv.config({ path: '.env' });
+
+  const config = {
+    authRequired: true,
+    auth0Logout: true,
+    secret: process.env.AUTH0_SECRET,
+    baseURL: process.env.AUTH0_BASE_URL || 'http://localhost:15500',
+    clientID: process.env.AUTH0_CLIENT_ID,
+    issuerBaseURL: process.env.AUTH0_ISSUER_BASE_URL,
+    routes: {
+      // eslint-disable-next-line @typescript-eslint/prefer-as-const
+      login: false as false, 
+      // eslint-disable-next-line @typescript-eslint/prefer-as-const
+      logout: false as false,
+    }
+  };
+
+  // this attaches default /login, /logout, and /callback routes to the baseURL (in this case only /callback because we disabled login and logout in the config)
+  app.use(auth(config));
+
+  app.get('/api/profile', (req: Request, res: Response) => {
+    res.send(req.oidc.isAuthenticated() ? req.oidc.user : 'Not logged in');
+  });
+
+  app.get('/api/login', (req, res) => {
+    const returnURL = req.query.returnTo as string || '/';
+    if (req.oidc.isAuthenticated()) {
+      return res.redirect(returnURL);
+    }
+
+    res.oidc.login({ returnTo: returnURL });
+  });
+
+  app.get('/api/logout', (req, res) => {
+    const returnURL = req.query.returnTo as string || '/';
+    res.oidc.logout({
+      returnTo: returnURL,
+      // This ensures Auth0 SSO session is ended too
+      logoutParams: {
+        returnTo: returnURL,
+      },
+    });
+  });
+
+
+  //////////////////////////////////////
+
 
   /**
    * Fetches summaries of all evals, optionally for a given dataset.
@@ -278,8 +293,7 @@ export async function startServer(
   const httpServer = http.createServer(app);
   const io = new SocketIOServer(httpServer, {
     cors: {
-      origin: 'http://localhost:3000', 
-      credentials: true,
+      origin: 'http://localhost:3000',
     },
   });
 

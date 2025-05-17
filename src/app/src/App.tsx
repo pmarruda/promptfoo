@@ -67,6 +67,7 @@ const router = createBrowserRouter(
           <Route path="/report" element={<ReportPage />} />
           <Route path="/setup" element={<EvalCreatorPage />} />
           {<Route path="/login" element={<LoginPage />} />}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Route>
     </>,
