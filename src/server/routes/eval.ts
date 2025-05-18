@@ -37,6 +37,11 @@ evalRouter.post('/job', (req: Request, res: Response): void => {
     logs: [],
   });
 
+  const user = req.oidc.user;
+  if (user?.email) {
+    setUserEmail(user.email); 
+  }
+
   promptfoo
     .evaluate(
       Object.assign({}, testSuite, {

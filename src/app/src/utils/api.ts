@@ -2,12 +2,15 @@ import useApiConfig from '@app/stores/apiConfig';
 
 export async function callApi(path: string, options: RequestInit = {}): Promise<Response> {
   const { apiBaseUrl } = useApiConfig.getState();
-  return fetch(`${apiBaseUrl}/api${path}`, options);
+  return fetch(`${apiBaseUrl}/api${path}`, {
+    ...options,
+    credentials: 'include',
+  });
 }
 
 export async function fetchUserEmail(): Promise<string | null> {
   try {
-    const response = await callApi('/user/email', {
+    const response = await callApi('/profile', {
       method: 'GET',
     });
 
