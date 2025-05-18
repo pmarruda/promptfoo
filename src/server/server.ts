@@ -104,7 +104,11 @@ export function createApp() {
   app.use(auth(config));
 
   app.get('/api/profile', (req: Request, res: Response) => {
-    res.send(req.oidc.isAuthenticated() ? req.oidc.user : 'Not logged in');
+    if (!req.oidc.isAuthenticated()) {
+      res.json({ error: 'Not authenticated' });
+    }
+
+    res.json(req.oidc.user);
   });
 
   app.get('/api/login', (req, res) => {

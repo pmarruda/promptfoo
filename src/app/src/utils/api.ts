@@ -10,7 +10,7 @@ export async function callApi(path: string, options: RequestInit = {}): Promise<
 
 export async function fetchUserEmail(): Promise<string | null> {
   try {
-    const response = await callApi('/user/email', {
+    const response = await callApi('/profile', {
       method: 'GET',
     });
 
