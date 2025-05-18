@@ -35,11 +35,13 @@ FROM base AS server
 
 WORKDIR /app
 COPY --from=builder /app/node_modules ./node_modules
-# COPY --from=builder /app/dist ./dist
 COPY --from=builder --chown=promptfoo:promptfoo /app/dist ./dist
 
-# Make Python version configurable with a default of 3.12
+# Ficheiros para Voz da NOS
+COPY /z_docker_image_files/Manual_Voz_NOS_2025.pdf .
+COPY /z_docker_image_files/Voz_da_NOS-GuiaDeEstilos.pdf .
 
+# Make Python version configurable with a default of 3.12
 ARG PYTHON_VERSION=3.12
 
 # Install Python for python providers, prompts, asserts, etc.
