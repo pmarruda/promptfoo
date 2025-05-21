@@ -124,7 +124,7 @@ export function createApp() {
     const returnURL = req.query.returnTo as string || '/';
     res.oidc.logout({
       returnTo: returnURL,
-      // This ensures Auth0 SSO session is ended too
+      // ensures Auth0 SSO session is ended too
       logoutParams: {
         returnTo: returnURL,
       },
