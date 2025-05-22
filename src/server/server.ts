@@ -1,8 +1,10 @@
 import compression from 'compression';
 import cors from 'cors';
+import dotenv from 'dotenv';
 import 'dotenv/config';
 import type { Request, Response } from 'express';
 import express from 'express';
+import { auth, requiresAuth } from 'express-openid-connect';
 import http from 'node:http';
 import path from 'node:path';
 import { Server as SocketIOServer } from 'socket.io';
@@ -37,9 +39,6 @@ import { providersRouter } from './routes/providers';
 import { redteamRouter } from './routes/redteam';
 import { userRouter } from './routes/user';
 
-import dotenv from 'dotenv';
-import { auth } from 'express-openid-connect';
-
 // Prompts cache
 let allPrompts: PromptWithMetadata[] | null = null;
 
@@ -48,10 +47,12 @@ export function createApp() {
 
   const staticDir = path.join(getDirectory(), 'app');
 
-  app.use(cors({
-    origin: 'http://localhost:3000',
-    credentials: true,
-  }));
+  app.use(
+    cors({
+      origin: 'http://localhost:3000',
+      credentials: true,
+    }),
+  );
   app.use(compression());
   app.use(express.json({ limit: '100mb' }));
   app.use(express.urlencoded({ limit: '100mb', extended: true }));
@@ -79,14 +80,27 @@ export function createApp() {
     res.json(result);
   });
 
-
+  app.get('/login-error', (req, res) => {
+    const reason = req.query.reason || 'Unknown error';
+    res.send(`
+      <html>
+        <body style="font-family: sans-serif; padding: 2rem;">
+          <h2>Access Denied</h2>
+          <p><strong>${reason}</strong></p>
+          <p>Your email may not be authorized to access this application. Make sure you are using a corporative email.</p>
+          <p> Contact the Innovation Team if you believe this is a mistake.</p>
+          <a href="/api/logout?returnTo=/api/login">Click here to try again with another account</a>
+        </body>
+      </html>
+    `);
+  });
 
   ////////////////////////////////////////
-  // LOGIN STUFF
+  // AUTH0 STUFF
   dotenv.config({ path: '.env' });
 
   const config = {
-    authRequired: true,
+    authRequired: false,
     auth0Logout: true,
     secret: process.env.AUTH0_SECRET,
     baseURL: process.env.AUTH0_BASE_URL || 'http://localhost:15500',
@@ -94,14 +108,33 @@ export function createApp() {
     issuerBaseURL: process.env.AUTH0_ISSUER_BASE_URL,
     routes: {
       // eslint-disable-next-line @typescript-eslint/prefer-as-const
-      login: false as false, 
+      login: false as false,
       // eslint-disable-next-line @typescript-eslint/prefer-as-const
       logout: false as false,
-    }
+    },
   };
 
   // this attaches default /login, /logout, and /callback routes to the baseURL (in this case only /callback because we disabled login and logout in the config)
   app.use(auth(config));
+
+  app.use(
+    (
+      err: { message: string | number | boolean },
+      req: { originalUrl: string },
+      res: { redirect: (arg0: string) => void | Promise<void> },
+      next: (arg0: any) => void,
+    ) => {
+      // Check if this was a failed Auth0 login attempt
+      if (req.originalUrl.startsWith('/callback') && err?.message) {
+        console.error('Auth0 login error:', err.message);
+
+        // Redirect to a backend-served page that explains the problem
+        return res.redirect(`/login-error?reason=${encodeURIComponent(err.message)}`);
+      }
+
+      next(err); // Pass any other errors through
+    },
+  );
 
   app.get('/api/profile', (req: Request, res: Response) => {
     if (!req.oidc.isAuthenticated()) {
@@ -112,34 +145,34 @@ export function createApp() {
   });
 
   app.get('/api/login', (req, res) => {
-    const returnURL = req.query.returnTo as string || '/';
-    if (req.oidc.isAuthenticated()) {
-      return res.redirect(returnURL);
-    }
-
-    res.oidc.login({ returnTo: returnURL });
-  });
-
-  app.get('/api/logout', (req, res) => {
-    const returnURL = req.query.returnTo as string || '/';
-    res.oidc.logout({
+    const returnURL = (req.query.returnTo as string) || '/';
+    res.oidc.login({
       returnTo: returnURL,
-      // This ensures Auth0 SSO session is ended too
-      logoutParams: {
-        returnTo: returnURL,
+      authorizationParams: {
+        prompt: 'login',
       },
     });
   });
 
+  app.get('/api/logout', (req, res) => {
+    const returnURL = (req.query.returnTo as string) || '/';
+    res.oidc.logout({
+      returnTo: returnURL,
+      // ensures Auth0 SSO session is ended too
+      logoutParams: {
+        returnTo: returnURL
+      },
+    });
+  });
 
   //////////////////////////////////////
-
 
   /**
    * Fetches summaries of all evals, optionally for a given dataset.
    */
   app.get(
     '/api/results',
+    requiresAuth(),
     async (
       // eslint-disable-next-line @typescript-eslint/no-empty-object-type
       req: Request<{}, {}, {}, { datasetId?: string }>,
@@ -150,24 +183,28 @@ export function createApp() {
     },
   );
 
-  app.get('/api/results/:id', async (req: Request, res: Response): Promise<void> => {
-    const { id } = req.params;
-    const file = await readResult(id);
-    if (!file) {
-      res.status(404).send('Result not found');
-      return;
-    }
-    res.json({ data: file.result });
-  });
+  app.get(
+    '/api/results/:id',
+    requiresAuth(),
+    async (req: Request, res: Response): Promise<void> => {
+      const { id } = req.params;
+      const file = await readResult(id);
+      if (!file) {
+        res.status(404).send('Result not found');
+        return;
+      }
+      res.json({ data: file.result });
+    },
+  );
 
-  app.get('/api/prompts', async (req: Request, res: Response): Promise<void> => {
+  app.get('/api/prompts', requiresAuth(), async (req: Request, res: Response): Promise<void> => {
     if (allPrompts == null) {
       allPrompts = await getPrompts();
     }
     res.json({ data: allPrompts });
   });
 
-  app.get('/api/history', async (req: Request, res: Response): Promise<void> => {
+  app.get('/api/history', requiresAuth(), async (req: Request, res: Response): Promise<void> => {
     const { tagName, tagValue, description } = req.query;
     const tag =
       tagName && tagValue ? { key: tagName as string, value: tagValue as string } : undefined;
@@ -180,75 +217,91 @@ export function createApp() {
     });
   });
 
-  app.get('/api/prompts/:sha256hash', async (req: Request, res: Response): Promise<void> => {
-    const sha256hash = req.params.sha256hash;
-    const prompts = await getPromptsForTestCasesHash(sha256hash);
-    res.json({ data: prompts });
-  });
+  app.get(
+    '/api/prompts/:sha256hash',
+    requiresAuth(),
+    async (req: Request, res: Response): Promise<void> => {
+      const sha256hash = req.params.sha256hash;
+      const prompts = await getPromptsForTestCasesHash(sha256hash);
+      res.json({ data: prompts });
+    },
+  );
 
-  app.get('/api/datasets', async (req: Request, res: Response): Promise<void> => {
+  app.get('/api/datasets', requiresAuth(), async (req: Request, res: Response): Promise<void> => {
     res.json({ data: await getTestCases() });
   });
 
-  app.get('/api/results/share/check-domain', async (req: Request, res: Response): Promise<void> => {
-    const id = String(req.query.id);
-    if (!id) {
-      res.status(400).json({ error: 'Missing id parameter' });
-      return;
-    }
+  app.get(
+    '/api/results/share/check-domain',
+    requiresAuth(),
+    async (req: Request, res: Response): Promise<void> => {
+      const id = String(req.query.id);
+      if (!id) {
+        res.status(400).json({ error: 'Missing id parameter' });
+        return;
+      }
 
-    const eval_ = await Eval.findById(id);
-    if (!eval_) {
-      logger.warn(`Eval not found for id: ${id}`);
-      res.status(404).json({ error: 'Eval not found' });
-      return;
-    }
+      const eval_ = await Eval.findById(id);
+      if (!eval_) {
+        logger.warn(`Eval not found for id: ${id}`);
+        res.status(404).json({ error: 'Eval not found' });
+        return;
+      }
 
-    const { domain } = determineShareDomain(eval_);
-    const isCloudEnabled = cloudConfig.isEnabled();
-    res.json({ domain, isCloudEnabled });
-  });
+      const { domain } = determineShareDomain(eval_);
+      const isCloudEnabled = cloudConfig.isEnabled();
+      res.json({ domain, isCloudEnabled });
+    },
+  );
 
-  app.post('/api/results/share', async (req: Request, res: Response): Promise<void> => {
-    logger.debug(`Share request body: ${JSON.stringify(req.body)}`);
-    const { id } = req.body;
+  app.post(
+    '/api/results/share',
+    requiresAuth(),
+    async (req: Request, res: Response): Promise<void> => {
+      logger.debug(`Share request body: ${JSON.stringify(req.body)}`);
+      const { id } = req.body;
 
-    const result = await readResult(id);
-    if (!result) {
-      logger.warn(`Result not found for id: ${id}`);
-      res.status(404).json({ error: 'Eval not found' });
-      return;
-    }
-    const eval_ = await Eval.findById(id);
-    invariant(eval_, 'Eval not found');
+      const result = await readResult(id);
+      if (!result) {
+        logger.warn(`Result not found for id: ${id}`);
+        res.status(404).json({ error: 'Eval not found' });
+        return;
+      }
+      const eval_ = await Eval.findById(id);
+      invariant(eval_, 'Eval not found');
 
-    try {
-      const url = await createShareableUrl(eval_, true);
-      logger.debug(`Generated share URL: ${url}`);
-      res.json({ url });
-    } catch (error) {
-      logger.error(`Failed to generate share URL: ${error}`);
-      res.status(500).json({ error: 'Failed to generate share URL' });
-    }
-  });
+      try {
+        const url = await createShareableUrl(eval_, true);
+        logger.debug(`Generated share URL: ${url}`);
+        res.json({ url });
+      } catch (error) {
+        logger.error(`Failed to generate share URL: ${error}`);
+        res.status(500).json({ error: 'Failed to generate share URL' });
+      }
+    },
+  );
 
-  app.post('/api/dataset/generate', async (req: Request, res: Response): Promise<void> => {
-    const testSuite: TestSuite = {
-      prompts: req.body.prompts as Prompt[],
-      tests: req.body.tests as TestCase[],
-      providers: [],
-    };
-    const results = await synthesizeFromTestSuite(testSuite, {});
-    res.json({ results });
-  });
+  app.post(
+    '/api/dataset/generate',
+    requiresAuth(),
+    async (req: Request, res: Response): Promise<void> => {
+      const testSuite: TestSuite = {
+        prompts: req.body.prompts as Prompt[],
+        tests: req.body.tests as TestCase[],
+        providers: [],
+      };
+      const results = await synthesizeFromTestSuite(testSuite, {});
+      res.json({ results });
+    },
+  );
 
-  app.use('/api/eval', evalRouter);
-  app.use('/api/providers', providersRouter);
-  app.use('/api/redteam', redteamRouter);
-  app.use('/api/user', userRouter);
-  app.use('/api/configs', configsRouter);
+  app.use('/api/eval', requiresAuth(), evalRouter);
+  app.use('/api/providers', requiresAuth(), providersRouter);
+  app.use('/api/redteam', requiresAuth(), redteamRouter);
+  app.use('/api/user', requiresAuth(), userRouter);
+  app.use('/api/configs', requiresAuth(), configsRouter);
 
-  app.post('/api/telemetry', async (req: Request, res: Response): Promise<void> => {
+  app.post('/api/telemetry', requiresAuth(), async (req: Request, res: Response): Promise<void> => {
     try {
       const result = TelemetryEventSchema.safeParse(req.body);
 
@@ -278,6 +331,7 @@ export function createApp() {
     'text/javascript': ['js', 'mjs', 'cjs'],
   });
 
+  app.use(requiresAuth());
   app.use(express.static(staticDir));
 
   // Handle client routing, return all requests to the app

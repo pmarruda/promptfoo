@@ -169,7 +169,7 @@ export default function Navigation({
   const { apiBaseUrl } = useApiConfig.getState();
 
   const handleLogout = () => {
-    const logoutUrl = `${apiBaseUrl}/api/logout?returnTo=${window.location.origin}/login`;
+    const logoutUrl = `${apiBaseUrl}/api/logout?returnTo=${window.location.origin}/api/login`;
     window.location.href = logoutUrl;
   };
 
